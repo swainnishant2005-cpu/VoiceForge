@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import Login from "./Auth/Login";
 import Register from "./Auth/Register";
 import "./App.css"
-const API_URL = "http://127.0.0.1:8000/api";
+const API_URL = "https://voiceforge-backend-5ci6.onrender.com/api";
 
 function App() {
   // =========================================================

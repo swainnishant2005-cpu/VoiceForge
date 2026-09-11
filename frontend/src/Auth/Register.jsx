@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-const API_URL = "http://127.0.0.1:8000/api";
+const API_URL = "https://voiceforge-backend-5ci6.onrender.com/api";
 
 function Register({ onShowLogin }) {
   const [username, setUsername] = useState("");
