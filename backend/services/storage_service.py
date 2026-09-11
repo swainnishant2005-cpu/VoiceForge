@@ -1,7 +1,8 @@
 import os
+from urllib.parse import quote
 
+import requests
 from dotenv import load_dotenv
-from supabase import create_client
 
 
 # =========================
@@ -9,7 +10,6 @@ from supabase import create_client
 # =========================
 
 load_dotenv()
-
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
@@ -21,10 +21,10 @@ SUPABASE_BUCKET = os.getenv(
 
 
 # =========================
-# GET SUPABASE CLIENT
+# VALIDATE CONFIGURATION
 # =========================
 
-def get_supabase_client():
+def validate_supabase_config():
 
     if not SUPABASE_URL:
         raise RuntimeError(
@@ -35,6 +35,28 @@ def get_supabase_client():
         raise RuntimeError(
             "SUPABASE_KEY is not configured."
         )
+
+    if not SUPABASE_BUCKET:
+        raise RuntimeError(
+            "SUPABASE_BUCKET is not configured."
+        )
+
+
+# =========================
+# GET SUPABASE CLIENT
+# =========================
+
+def get_supabase_client():
+    """
+    Kept for compatibility with the existing project.
+
+    The actual audio upload now uses the
+    Supabase Storage REST API directly.
+    """
+
+    validate_supabase_config()
+
+    from supabase import create_client
 
     return create_client(
         SUPABASE_URL,
@@ -51,46 +73,97 @@ def upload_audio(
     filename: str
 ) -> str:
 
-    client = get_supabase_client()
+    validate_supabase_config()
+
+    if not os.path.isfile(file_path):
+        raise RuntimeError(
+            f"Audio file does not exist: {file_path}"
+        )
+
+    # Safely encode the filename for the URL
+    encoded_filename = quote(
+        filename,
+        safe=""
+    )
+
+    # Supabase Storage REST upload endpoint
+    upload_url = (
+        f"{SUPABASE_URL.rstrip('/')}"
+        f"/storage/v1/object/"
+        f"{SUPABASE_BUCKET}/"
+        f"{encoded_filename}"
+    )
+
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "audio/mpeg",
+        "cache-control": "3600",
+        "x-upsert": "true"
+    }
 
     try:
 
         # -------------------------
-        # Upload file
+        # Upload MP3
         # -------------------------
 
-        with open(file_path, "rb") as file:
+        with open(file_path, "rb") as audio_file:
 
-            response = (
-                client
-                .storage
-                .from_(SUPABASE_BUCKET)
-                .upload(
-                    path=filename,
-                    file=file,
-                    file_options={
-                        "content-type": "audio/mpeg",
-                        "cache-control": "3600",
-                        "upsert": "true"
-                    }
-                )
+            response = requests.post(
+                upload_url,
+                headers=headers,
+                data=audio_file,
+                timeout=60
             )
 
+
+        # -------------------------
+        # Check upload result
+        # -------------------------
+
+        if not response.ok:
+
+            print(
+                "Supabase upload failed."
+            )
+
+            print(
+                "Status code:",
+                response.status_code
+            )
+
+            print(
+                "Response:",
+                response.text
+            )
+
+            raise RuntimeError(
+                "Supabase Storage upload failed: "
+                f"HTTP {response.status_code} - "
+                f"{response.text}"
+            )
+
+
         print(
-            "Supabase upload response:",
-            response
+            "Supabase upload successful."
+        )
+
+        print(
+            "Upload response:",
+            response.text
         )
 
 
         # -------------------------
-        # Generate public URL
+        # Build public URL
         # -------------------------
 
         public_url = (
-            client
-            .storage
-            .from_(SUPABASE_BUCKET)
-            .get_public_url(filename)
+            f"{SUPABASE_URL.rstrip('/')}"
+            f"/storage/v1/object/public/"
+            f"{SUPABASE_BUCKET}/"
+            f"{encoded_filename}"
         )
 
         print(
@@ -98,30 +171,32 @@ def upload_audio(
             public_url
         )
 
-
-        if not public_url:
-            raise RuntimeError(
-                "Supabase did not return a public URL."
-            )
+        return public_url
 
 
-        return str(public_url)
+    except requests.RequestException as error:
+
+        print(
+            "Supabase network error:",
+            repr(error)
+        )
+
+        raise RuntimeError(
+            f"Unable to connect to Supabase Storage: {error}"
+        ) from error
+
+
+    except RuntimeError:
+
+        raise
 
 
     except Exception as error:
 
         print(
-            "Supabase upload error:",
+            "Supabase audio upload error:",
             repr(error)
         )
-
-        # Print the underlying exception if
-        # Supabase has wrapped another error.
-        if error.__context__:
-            print(
-                "Underlying Supabase error:",
-                repr(error.__context__)
-            )
 
         raise RuntimeError(
             f"Supabase audio upload failed: {error}"
