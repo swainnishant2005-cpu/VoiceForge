@@ -1,6 +1,6 @@
 from pathlib import Path
 from uuid import uuid4
-import os
+import shutil
 
 from gtts import gTTS
 from pydub import AudioSegment
@@ -10,33 +10,12 @@ from pydub import AudioSegment
 # FFMPEG CONFIGURATION
 # =========================
 
-FFMPEG_BIN = (
-    r"C:\Users\Nishant Swain\AppData\Local\Microsoft\WinGet\Packages"
-    r"\Gyan.FFmpeg.Shared_Microsoft.Winget.Source_8wekyb3d8bbwe"
-    r"\ffmpeg-9.0.1-full_build-shared\bin"
-)
+FFMPEG_PATH = shutil.which("ffmpeg")
+FFPROBE_PATH = shutil.which("ffprobe")
 
-FFMPEG_PATH = os.path.join(
-    FFMPEG_BIN,
-    "ffmpeg.exe"
-)
-
-FFPROBE_PATH = os.path.join(
-    FFMPEG_BIN,
-    "ffprobe.exe"
-)
-
-
-# Make FFmpeg tools available to pydub
-os.environ["PATH"] = (
-    FFMPEG_BIN
-    + os.pathsep
-    + os.environ.get("PATH", "")
-)
-
-
-# Tell pydub exactly where FFmpeg is
-AudioSegment.converter = FFMPEG_PATH
+# Make FFmpeg available to pydub
+if FFMPEG_PATH:
+    AudioSegment.converter = FFMPEG_PATH
 
 
 # =========================
@@ -145,12 +124,12 @@ def generate_speech(
     # Check FFmpeg
     # -------------------------
 
-    if not os.path.isfile(FFMPEG_PATH):
+    if not FFMPEG_PATH:
         raise RuntimeError(
             "FFmpeg executable was not found."
         )
 
-    if not os.path.isfile(FFPROBE_PATH):
+    if not FFPROBE_PATH:
         raise RuntimeError(
             "FFprobe executable was not found."
         )
@@ -223,18 +202,19 @@ def generate_speech(
 
         if speed != 1.0:
 
+            original_frame_rate = audio.frame_rate
+
             new_frame_rate = int(
-                audio.frame_rate * speed
+                original_frame_rate * speed
             )
 
             audio = audio._spawn(
                 audio.raw_data,
                 overrides={
-                    "frame_rate":
-                    new_frame_rate
+                    "frame_rate": new_frame_rate
                 }
             ).set_frame_rate(
-                audio.frame_rate
+                original_frame_rate
             )
 
 
