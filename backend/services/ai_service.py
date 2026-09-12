@@ -1,4 +1,10 @@
-from ollama import chat
+import os
+from google import genai
+
+
+client = genai.Client(
+    api_key=os.getenv("GEMINI_API_KEY")
+)
 
 
 def enhance_text(text: str, action: str) -> str:
@@ -45,24 +51,23 @@ Do not add explanations.
         raise ValueError("Invalid AI enhancement action.")
 
     try:
-        response = chat(
-            model="llama3.2",
-            messages=[
-                {
-                    "role": "system",
-                    "content": prompts[action]
-                },
-                {
-                    "role": "user",
-                    "content": text
-                }
-            ]
+
+        response = client.models.generate_content(
+           model="gemini-3.6-flash",
+            contents=f"""
+{prompts[action]}
+
+Text:
+{text}
+"""
         )
 
-        return response.message.content.strip()
+        return response.text.strip()
 
     except Exception as error:
-        print("Ollama error:", error)
+
+        print("Gemini error:", error)
+
         raise RuntimeError(
-            "Ollama is not running or the llama3.2 model is unavailable."
+            "Gemini AI enhancement failed."
         )
